@@ -40,27 +40,6 @@ async function scrapeGmail500() {
 
       const page = await browser.newPage();
 
-      // Variabile per catturare la risposta API
-      let apiResponse = null;
-
-      // Setup listener per intercettare le risposte
-      page.on('response', async (response) => {
-        const url = response.url();
-
-        if (url.includes('/api/')) {
-          console.log(`🔍 Chiamata API: ${url}`);
-        }
-
-        if (url.includes(CONFIG.API_URL_PATTERN) && response.status() === 200) {
-          console.log(`✅ Target trovato: ${url}`);
-          try {
-            apiResponse = await response.json();
-          } catch (e) {
-            console.log(`❌ Errore JSON: ${e.message}`);
-          }
-        }
-      });
-
       // Naviga alla pagina
       console.log(`🌐 Navigando a ${CONFIG.TARGET_URL}...`);
       await page.goto(CONFIG.TARGET_URL, {
@@ -68,20 +47,48 @@ async function scrapeGmail500() {
         timeout: CONFIG.BROWSER_TIMEOUT,
       });
 
-      // Aspetta chiamate AJAX
-      console.log('⏳ Aspettando chiamate AJAX...');
-      await page.waitForTimeout(5000);
+      // Selettori CSS per elementi React
+      const quantitySelector = '#root > div.ant-layout.my-var-css > div:nth-child(2) > div > div > div > div:nth-child(1) > div.ant-ribbon-wrapper.my-var-css > div.ant-ribbon.ant-ribbon-placement-end > span';
+      const priceSelector = '#root > div.ant-layout.my-var-css > div:nth-child(2) > div > div > div > div:nth-child(1) > div:nth-child(2) > h3';
 
-      if (!apiResponse) {
-        console.log('⏳ Aspetto altri 5 secondi...');
-        await page.waitForTimeout(5000);
-      }
+      // Aspetta che gli elementi siano caricati
+      console.log('⏳ Aspettando rendering React...');
+      await page.waitForSelector(priceSelector, { timeout: 30000 });
+      await page.waitForSelector(quantitySelector, { timeout: 30000 });
+      console.log('✅ Elementi trovati');
 
-      if (!apiResponse) {
-        throw new Error('Risposta API non ricevuta');
-      }
+      // Aspetta ancora un po'
+      await page.waitForTimeout(2000);
 
-      const data = apiResponse;
+      // Estrai dati dal DOM
+      const data = await page.evaluate((qtySelector, priceSelector) => {
+        const quantityElement = document.querySelector(qtySelector);
+        const priceElement = document.querySelector(priceSelector);
+
+        let count = null;
+        let price = null;
+
+        if (quantityElement) {
+          const text = quantityElement.textContent.trim();
+          const match = text.match(/(\d+)/);
+          if (match) count = parseInt(match[1]);
+        }
+
+        if (priceElement) {
+          const text = priceElement.textContent.trim();
+          const match = text.match(/([\d.]+)/);
+          if (match) price = parseFloat(match[1]);
+        }
+
+        return {
+          successful: count !== null && price !== null,
+          data: {
+            count: count,
+            price: price,
+            code: '3011',
+          }
+        };
+      }, quantitySelector, priceSelector);
 
       console.log('📦 Risposta API ricevuta:', JSON.stringify(data, null, 2));
 
