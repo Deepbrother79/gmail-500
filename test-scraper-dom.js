@@ -48,51 +48,67 @@ async function scrapeGmail500() {
       });
       console.log('✅ Pagina caricata');
 
-      // Aspetta un po' per assicurarsi che tutto sia renderizzato
-      console.log('\n⏳ Aspettando rendering completo (3 secondi)...');
-      await page.waitForTimeout(3000);
+      // Aspetta che gli elementi React siano renderizzati
+      console.log('\n⏳ Aspettando rendering React...');
 
-      // Estrai dati direttamente dal DOM
+      // Selettori forniti dall'utente
+      const quantitySelector = '#root > div.ant-layout.my-var-css > div:nth-child(2) > div > div > div > div:nth-child(1) > div.ant-ribbon-wrapper.my-var-css > div.ant-ribbon.ant-ribbon-placement-end > span';
+      const priceSelector = '#root > div.ant-layout.my-var-css > div:nth-child(2) > div > div > div > div:nth-child(1) > div:nth-child(2) > h3';
+
+      try {
+        // Aspetta che l'elemento del prezzo sia visibile (timeout 30s)
+        console.log('⏳ Aspettando elemento prezzo...');
+        await page.waitForSelector(priceSelector, { timeout: 30000 });
+        console.log('✅ Elemento prezzo trovato');
+
+        // Aspetta che l'elemento quantità sia visibile
+        console.log('⏳ Aspettando elemento quantità...');
+        await page.waitForSelector(quantitySelector, { timeout: 30000 });
+        console.log('✅ Elemento quantità trovato');
+      } catch (error) {
+        console.log(`❌ Timeout aspettando elementi: ${error.message}`);
+        console.log('📋 Salvo screenshot per debug...');
+        await page.screenshot({ path: '/tmp/debug.png' });
+        throw error;
+      }
+
+      // Aspetta ancora un po' per sicurezza
+      await page.waitForTimeout(2000);
+
+      // Estrai dati direttamente dal DOM con i selettori corretti
       console.log('\n🔍 Estraendo dati dal DOM HTML...');
 
-      const data = await page.evaluate(() => {
-        // Estrai quantità da: <span class="ant-ribbon-content">8651 pcs</span>
-        const quantityElement = document.querySelector('.ant-ribbon-content');
+      const data = await page.evaluate((qtySelector, priceSelector) => {
+        // Estrai quantità usando il selector fornito
+        const quantityElement = document.querySelector(qtySelector);
         let count = null;
+        let quantityText = 'NOT FOUND';
+
         if (quantityElement) {
-          const text = quantityElement.textContent.trim();
-          const match = text.match(/(\d+)\s*pcs/i);
+          quantityText = quantityElement.textContent.trim();
+          // Pattern: "8651 pcs" o solo "8651"
+          const match = quantityText.match(/(\d+)/);
           if (match) {
             count = parseInt(match[1]);
           }
         }
 
-        // Estrai prezzo da: <strong>Total: 0.3</strong>
-        // Cerca tutti gli elementi strong e trova quello con "Total:"
-        const strongElements = document.querySelectorAll('strong');
+        // Estrai prezzo usando il selector fornito
+        // Element: <h3 class="ant-typography my-var-css">...0.3...</h3>
+        const priceElement = document.querySelector(priceSelector);
         let price = null;
-        for (const el of strongElements) {
-          const text = el.textContent.trim();
-          if (text.includes('Total:')) {
-            const match = text.match(/Total:\s*([\d.]+)/i);
-            if (match) {
-              price = parseFloat(match[1]);
-            }
-            break;
+        let priceText = 'NOT FOUND';
+
+        if (priceElement) {
+          priceText = priceElement.textContent.trim();
+          // Il testo è tipo: "Price 0.3 / pc"
+          // Estrai solo il numero
+          const match = priceText.match(/([\d.]+)/);
+          if (match) {
+            price = parseFloat(match[1]);
           }
         }
 
-        // Prova anche altri possibili selettori per il prezzo
-        if (price === null) {
-          // Cerca nella pagina qualsiasi elemento che contenga il pattern del prezzo
-          const allText = document.body.innerText;
-          const priceMatch = allText.match(/Total:\s*([\d.]+)/i);
-          if (priceMatch) {
-            price = parseFloat(priceMatch[1]);
-          }
-        }
-
-        // Estrai anche altre info se disponibili
         const productCode = '3011'; // Dal URL
 
         return {
@@ -100,17 +116,24 @@ async function scrapeGmail500() {
           price: price,
           productCode: productCode,
           // Debug info
-          quantityText: quantityElement ? quantityElement.textContent.trim() : 'NOT FOUND',
-          allStrongTexts: Array.from(strongElements).map(el => el.textContent.trim()),
+          quantityText: quantityText,
+          priceText: priceText,
+          quantityElementFound: quantityElement !== null,
+          priceElementFound: priceElement !== null,
         };
-      });
+      }, quantitySelector, priceSelector);
 
       console.log('\n' + '='.repeat(60));
       console.log('🔍 DATI ESTRATTI DAL DOM:');
       console.log('='.repeat(60));
       console.log('Debug Info:');
+      console.log(`  Elemento quantità trovato: ${data.quantityElementFound}`);
       console.log(`  Testo quantità: "${data.quantityText}"`);
-      console.log(`  Tutti i <strong>: ${JSON.stringify(data.allStrongTexts, null, 2)}`);
+      console.log(`  Valore estratto: ${data.count}`);
+      console.log('');
+      console.log(`  Elemento prezzo trovato: ${data.priceElementFound}`);
+      console.log(`  Testo prezzo: "${data.priceText}"`);
+      console.log(`  Valore estratto: ${data.price}`);
       console.log('─'.repeat(60));
 
       // Valida che abbiamo i dati
