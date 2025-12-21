@@ -41,19 +41,30 @@ async function scrapeGmail500() {
 
       const page = await browser.newPage();
 
-      // Setup listener PRIMA di navigare
+      // Variabile per catturare la risposta API
+      let apiResponse = null;
+
+      // Setup listener per intercettare TUTTE le risposte
       console.log('\n🎯 Configurando intercettazione risposta API...');
-      const responsePromise = page.waitForResponse(
-        response => {
-          const url = response.url();
-          const matches = url.includes(CONFIG.API_URL_PATTERN) && response.status() === 200;
-          if (matches) {
-            console.log(`✅ Trovata risposta API: ${url}`);
+      page.on('response', async (response) => {
+        const url = response.url();
+
+        // Log di debug - mostra tutte le richieste API
+        if (url.includes('/api/')) {
+          console.log(`   🔍 Rilevata chiamata API: ${url}`);
+        }
+
+        // Cattura la risposta che ci interessa
+        if (url.includes(CONFIG.API_URL_PATTERN) && response.status() === 200) {
+          console.log(`   ✅ Trovata risposta target: ${url}`);
+          try {
+            apiResponse = await response.json();
+            console.log('   ✅ JSON estratto dalla risposta');
+          } catch (e) {
+            console.log(`   ❌ Errore parsing JSON: ${e.message}`);
           }
-          return matches;
-        },
-        { timeout: CONFIG.BROWSER_TIMEOUT }
-      );
+        }
+      });
       console.log('✅ Listener configurato');
 
       // Naviga alla pagina
@@ -61,19 +72,31 @@ async function scrapeGmail500() {
       console.log('⏳ Aspettando che la pagina carichi completamente...');
 
       await page.goto(CONFIG.TARGET_URL, {
-        waitUntil: 'networkidle0',
+        waitUntil: 'networkidle2', // Cambiato da networkidle0
         timeout: CONFIG.BROWSER_TIMEOUT,
       });
       console.log('✅ Pagina caricata');
 
-      // Cattura risposta API
-      console.log('\n⏳ Aspettando risposta API...');
-      const response = await responsePromise;
-      console.log('✅ Risposta API ricevuta!');
+      // Aspetta un po' per dare tempo alle chiamate AJAX di completarsi
+      console.log('\n⏳ Aspettando chiamate AJAX (5 secondi)...');
+      await page.waitForTimeout(5000);
 
-      // Estrai JSON
-      console.log('\n📦 Parsing JSON dalla risposta...');
-      const data = await response.json();
+      // Verifica se abbiamo catturato la risposta
+      if (!apiResponse) {
+        console.log('❌ Risposta API non catturata dopo 5 secondi');
+        console.log('⏳ Aspetto altri 5 secondi...');
+        await page.waitForTimeout(5000);
+      }
+
+      if (!apiResponse) {
+        throw new Error('Risposta API non ricevuta dopo 10 secondi');
+      }
+
+      console.log('✅ Risposta API catturata!');
+
+      // Usa la risposta catturata
+      console.log('\n📦 Analizzando dati ricevuti...');
+      const data = apiResponse;
 
       // Mostra risposta completa
       console.log('\n' + '='.repeat(60));
