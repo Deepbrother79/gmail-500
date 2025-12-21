@@ -1,0 +1,248 @@
+╔═══════════════════════════════════════════════════════════════╗
+║  SETUP GITHUB ACTIONS - SOLUZIONE GRATUITA                    ║
+║  Segui questi passi nell'ordine                               ║
+╚═══════════════════════════════════════════════════════════════╝
+
+═══════════════════════════════════════════════════════════════
+STEP 1: PREPARA IL PROGETTO (2 minuti)
+═══════════════════════════════════════════════════════════════
+
+1.1 Apri terminale e vai nella directory:
+    cd "C:\Users\John\Documents\Gmail500-scarper"
+
+1.2 Rinomina package.json per GitHub Actions:
+    del package.json
+    ren package-github-actions.json package.json
+
+1.3 Verifica che i file chiave esistano:
+    dir .github\workflows\scraper.yml
+    dir github-actions-scraper.js
+    dir package.json
+
+    ✅ Se vedi tutti e 3 i file, procedi!
+
+═══════════════════════════════════════════════════════════════
+STEP 2: CREA REPOSITORY GITHUB (3 minuti)
+═══════════════════════════════════════════════════════════════
+
+2.1 Inizializza git:
+    git init
+    git add .
+    git commit -m "Initial commit - GitHub Actions scraper"
+
+2.2 Vai su https://github.com/new
+    - Repository name: gmail500-scraper
+    - Visibilità: PRIVATE (importante!)
+    - NON aggiungere README, .gitignore, license
+    - Click "Create repository"
+
+2.3 Collega il repository locale:
+    git remote add origin https://github.com/TUO-USERNAME/gmail500-scraper.git
+    git branch -M main
+    git push -u origin main
+
+    ⚠️ SOSTITUISCI "TUO-USERNAME" con il tuo username GitHub!
+
+═══════════════════════════════════════════════════════════════
+STEP 3: CONFIGURA SUPABASE (2 minuti)
+═══════════════════════════════════════════════════════════════
+
+3.1 Vai su https://supabase.com/dashboard
+
+3.2 Crea nuovo progetto (se non l'hai già):
+    - Nome: gmail500-scraper
+    - Database Password: [scegli una password]
+    - Region: [più vicina a te]
+    - Click "Create new project"
+
+3.3 Vai su SQL Editor (icona con </> a sinistra)
+
+3.4 Copia e incolla questo SQL:
+
+CREATE TABLE gmail500_products (
+  id BIGSERIAL PRIMARY KEY,
+  price DECIMAL(10, 3) NOT NULL,
+  count INTEGER NOT NULL,
+  timestamp TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_timestamp ON gmail500_products(timestamp);
+CREATE INDEX idx_created_at ON gmail500_products(created_at);
+
+3.5 Click "RUN" (o F5)
+
+3.6 Annota questi dati (servono per step 4):
+    - URL: Settings > API > Project URL
+      Esempio: https://abcdefgh.supabase.co
+
+    - Anon Key: Settings > API > Project API keys > anon public
+      Esempio: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+═══════════════════════════════════════════════════════════════
+STEP 4: CONFIGURA SECRETS GITHUB (2 minuti)
+═══════════════════════════════════════════════════════════════
+
+4.1 Vai sul tuo repository GitHub:
+    https://github.com/TUO-USERNAME/gmail500-scraper
+
+4.2 Click: Settings > Secrets and variables > Actions
+
+4.3 Click "New repository secret"
+
+4.4 Crea SECRET 1:
+    Name: SUPABASE_URL
+    Secret: [incolla il Project URL da Supabase]
+           Esempio: https://abcdefgh.supabase.co
+    Click "Add secret"
+
+4.5 Crea SECRET 2:
+    Name: SUPABASE_ANON_KEY
+    Secret: [incolla l'Anon Key da Supabase]
+           Esempio: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+    Click "Add secret"
+
+4.6 Verifica che entrambi i secrets siano presenti nella lista
+
+═══════════════════════════════════════════════════════════════
+STEP 5: ATTIVA E TESTA GITHUB ACTIONS (2 minuti)
+═══════════════════════════════════════════════════════════════
+
+5.1 Vai su: Actions (tab in alto)
+
+5.2 Se vedi banner "Workflows aren't being run":
+    Click "I understand my workflows, go ahead and enable them"
+
+5.3 Dovresti vedere il workflow "Gmail500 Scraper" nella lista
+
+5.4 ESECUZIONE MANUALE (per testare):
+    - Click su "Gmail500 Scraper"
+    - Click "Run workflow" (a destra)
+    - Click "Run workflow" (verde)
+
+5.5 Aspetta 2-3 minuti e ricarica la pagina
+
+5.6 Click sull'esecuzione appena creata (avrà icona gialla/verde)
+
+5.7 Click su "scrape" per vedere i dettagli
+
+5.8 Controlla che nei logs vedi:
+    ✅ Browser lanciato
+    ✅ Navigando a https://gmail500.com/email/3011...
+    ✅ Risposta API ricevuta
+    ✅ Scraping completato
+    ✅ Dati salvati su Supabase
+    ✅ COMPLETATO CON SUCCESSO
+
+═══════════════════════════════════════════════════════════════
+STEP 6: VERIFICA DATI SU SUPABASE (1 minuto)
+═══════════════════════════════════════════════════════════════
+
+6.1 Vai su Supabase > Table Editor
+
+6.2 Seleziona tabella "gmail500_products"
+
+6.3 Dovresti vedere almeno 1 riga con:
+    - id
+    - price (esempio: 0.300)
+    - count (esempio: 8651)
+    - timestamp
+    - created_at
+
+    ✅ Se vedi i dati, tutto funziona!
+
+═══════════════════════════════════════════════════════════════
+CONFIGURAZIONE COMPLETATA! 🎉
+═══════════════════════════════════════════════════════════════
+
+Il tuo scraper ora:
+✅ Gira automaticamente OGNI ORA
+✅ Completamente GRATUITO
+✅ Salva dati su Supabase
+✅ 2000 minuti/mese inclusi
+
+═══════════════════════════════════════════════════════════════
+PROSSIMI PASSI
+═══════════════════════════════════════════════════════════════
+
+1. ASPETTA 1 ORA
+   Il workflow partirà automaticamente alla prossima ora (esempio: se sono le 14:30, partirà alle 15:00)
+
+2. VERIFICA ESECUZIONE AUTOMATICA
+   - Vai su GitHub > Actions
+   - Dovresti vedere una nuova esecuzione creata automaticamente
+   - Controlla i logs
+
+3. MONITORA MINUTI USATI
+   - GitHub > Settings > Billing and plans
+   - Verifica che sei sotto i 2000 minuti/mese
+
+═══════════════════════════════════════════════════════════════
+COMANDI UTILI
+═══════════════════════════════════════════════════════════════
+
+# Cambiare frequenza (esempio: ogni 2 ore invece di 1)
+# Modifica: .github/workflows/scraper.yml
+# Cambia: - cron: '0 * * * *'
+# In:     - cron: '0 */2 * * *'
+# Poi:
+git add .github/workflows/scraper.yml
+git commit -m "Change frequency to every 2 hours"
+git push
+
+# Vedere esecuzioni
+https://github.com/TUO-USERNAME/gmail500-scraper/actions
+
+# Vedere dati Supabase
+https://supabase.com/dashboard/project/TUO-PROJECT-ID/editor
+
+═══════════════════════════════════════════════════════════════
+TROUBLESHOOTING
+═══════════════════════════════════════════════════════════════
+
+❌ Workflow fallisce con "Secrets not configured"
+   → Verifica che i secrets siano configurati:
+     Settings > Secrets and variables > Actions
+     Devono esserci SUPABASE_URL e SUPABASE_ANON_KEY
+
+❌ Workflow non parte automaticamente
+   → Verifica che GitHub Actions sia abilitato:
+     Actions > "I understand, enable them"
+
+❌ Browser crash
+   → Già gestito nel codice con flag --no-sandbox
+
+❌ Timeout dopo 60s
+   → Aumenta BROWSER_TIMEOUT in github-actions-scraper.js
+     BROWSER_TIMEOUT: 90000, // 90 secondi
+
+═══════════════════════════════════════════════════════════════
+COSTI
+═══════════════════════════════════════════════════════════════
+
+✅ GitHub Actions: $0 (2000 minuti/mese gratis)
+✅ Supabase: $0 (piano gratuito)
+✅ TOTALE: $0/mese
+
+Con esecuzione ogni ora:
+- 24 esecuzioni/giorno × 30 giorni = 720 esecuzioni/mese
+- 720 × 2 minuti = 1440 minuti/mese
+- 1440 < 2000 ✅ OK!
+
+═══════════════════════════════════════════════════════════════
+SUPPORTO
+═══════════════════════════════════════════════════════════════
+
+Leggi documentazione completa:
+- README-GITHUB-ACTIONS.md (guida completa)
+- SCELTA-SOLUZIONE.md (confronto soluzioni)
+
+GitHub Actions docs:
+https://docs.github.com/en/actions
+
+Supabase docs:
+https://supabase.com/docs
+
+═══════════════════════════════════════════════════════════════
+
+Buon scraping! 🚀

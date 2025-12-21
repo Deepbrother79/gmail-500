@@ -1,0 +1,46 @@
+name: Gmail500 Scraper
+
+on:
+  # Scheduling: ogni ora (totalmente gratuito!)
+  schedule:
+    - cron: '0 * * * *'  # Ogni ora (alle :00)
+    # Altre opzioni:
+    # - cron: '0 */2 * * *'   # Ogni 2 ore
+    # - cron: '0 */6 * * *'   # Ogni 6 ore
+    # - cron: '0 9,21 * * *'  # Alle 9:00 e 21:00 UTC
+
+  # Permetti esecuzione manuale
+  workflow_dispatch:
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run scraper
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: node github-actions-scraper.js
+
+      - name: Report status
+        if: always()
+        run: |
+          if [ $? -eq 0 ]; then
+            echo "✅ Scraping completed successfully"
+          else
+            echo "❌ Scraping failed"
+            exit 1
+          fi

@@ -1,0 +1,18 @@
+{
+  "name": "gmail500-scraper-github-actions",
+  "version": "1.0.0",
+  "description": "Gmail500 scraper usando GitHub Actions (GRATUITO)",
+  "main": "github-actions-scraper.js",
+  "type": "module",
+  "scripts": {
+    "scrape": "node github-actions-scraper.js",
+    "test": "node github-actions-scraper.js"
+  },
+  "dependencies": {
+    "puppeteer": "^21.11.0",
+    "@supabase/supabase-js": "^2.39.0"
+  },
+  "keywords": ["github-actions", "scraper", "puppeteer", "gmail500", "free"],
+  "author": "",
+  "license": "ISC"
+}

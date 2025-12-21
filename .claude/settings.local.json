@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__cloudflare__search_cloudflare_documentation",
+      "mcp__cloudflare__workers_list",
+      "mcp__cloudflare__accounts_list",
+      "mcp__cloudflare__set_active_account",
+      "Bash(dir:*)",
+      "WebFetch(domain:developers.cloudflare.com)",
+      "WebFetch(domain:pptr.dev)",
+      "WebFetch(domain:gmail500.com)",
+      "Bash(if exist package.json del package.json)",
+      "Bash(ren:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)"
+    ]
+  }
+}
