@@ -40,26 +40,48 @@ async function scrapeGmail500() {
 
       const page = await browser.newPage();
 
-      // Setup listener PRIMA di navigare
-      const responsePromise = page.waitForResponse(
-        response => {
-          const url = response.url();
-          return url.includes(CONFIG.API_URL_PATTERN) && response.status() === 200;
-        },
-        { timeout: CONFIG.BROWSER_TIMEOUT }
-      );
+      // Variabile per catturare la risposta API
+      let apiResponse = null;
+
+      // Setup listener per intercettare le risposte
+      page.on('response', async (response) => {
+        const url = response.url();
+
+        if (url.includes('/api/')) {
+          console.log(`🔍 Chiamata API: ${url}`);
+        }
+
+        if (url.includes(CONFIG.API_URL_PATTERN) && response.status() === 200) {
+          console.log(`✅ Target trovato: ${url}`);
+          try {
+            apiResponse = await response.json();
+          } catch (e) {
+            console.log(`❌ Errore JSON: ${e.message}`);
+          }
+        }
+      });
 
       // Naviga alla pagina
       console.log(`🌐 Navigando a ${CONFIG.TARGET_URL}...`);
       await page.goto(CONFIG.TARGET_URL, {
-        waitUntil: 'networkidle0',
+        waitUntil: 'networkidle2',
         timeout: CONFIG.BROWSER_TIMEOUT,
       });
 
-      // Cattura risposta API
-      console.log('⏳ Aspettando risposta API...');
-      const response = await responsePromise;
-      const data = await response.json();
+      // Aspetta chiamate AJAX
+      console.log('⏳ Aspettando chiamate AJAX...');
+      await page.waitForTimeout(5000);
+
+      if (!apiResponse) {
+        console.log('⏳ Aspetto altri 5 secondi...');
+        await page.waitForTimeout(5000);
+      }
+
+      if (!apiResponse) {
+        throw new Error('Risposta API non ricevuta');
+      }
+
+      const data = apiResponse;
 
       console.log('📦 Risposta API ricevuta:', JSON.stringify(data, null, 2));
 
