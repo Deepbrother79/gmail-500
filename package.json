@@ -6,13 +6,22 @@
   "type": "module",
   "scripts": {
     "scrape": "node github-actions-scraper.js",
-    "test": "node github-actions-scraper.js"
+    "test": "node github-actions-scraper.js",
+    "debug": "node debug-scraper.js"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
     "puppeteer": "^21.11.0",
-    "@supabase/supabase-js": "^2.39.0"
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
   },
-  "keywords": ["github-actions", "scraper", "puppeteer", "gmail500", "free"],
+  "keywords": [
+    "github-actions",
+    "scraper",
+    "puppeteer",
+    "gmail500",
+    "free"
+  ],
   "author": "",
   "license": "ISC"
 }
