@@ -181,11 +181,19 @@ async function scrapeTarget(target) {
         console.log(`   ✅ Extracted ${apiData.length} products`);
 
         // Trasforma i dati nel formato richiesto
-        const products = apiData.map(p => ({
-          code: p.code,
-          price: parseFloat(p.price),
-          count: parseInt(p.count),
-        }));
+        const products = apiData.map(p => {
+          // Usa discountPrice se disponibile, altrimenti price
+          const finalPrice = p.discountPrice !== null && p.discountPrice !== undefined
+            ? p.discountPrice
+            : p.price;
+
+          return {
+            code: p.code,
+            price: parseFloat(finalPrice),
+            count: parseInt(p.count),
+            hasDiscount: p.discountPrice !== null && p.discountPrice !== undefined,
+          };
+        });
 
         return {
           target: target.name,
@@ -272,8 +280,9 @@ async function updateSupabase(products, tableName) {
         throw updateError;
       }
 
+      const discountInfo = product.hasDiscount ? ' (discounted)' : '';
       console.log(
-        `✅ UPDATE: id_provider ${product.code} → price=${product.price}, qty=${product.count}`
+        `✅ UPDATE: id_provider ${product.code} → price=${product.price}${discountInfo}, qty=${product.count}`
       );
       results.updated++;
     } catch (error) {
