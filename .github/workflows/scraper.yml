@@ -29,17 +29,17 @@ jobs:
         uses: actions/cache@v3
         with:
           path: node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('package.json') }}
+          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-node-
 
       - name: Install dependencies
-        run: npm install --prefer-offline --no-audit
+        run: npm ci --prefer-offline --no-audit
 
       - name: Run scraper
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE: ${{ secrets.SUPABASE_SERVICE_ROLE }}
           URL_TABLE: ${{ secrets.URL_TABLE }}
           URL_SCARP_1: ${{ secrets.URL_SCARP_1 }}
           URL_SCARP_1_JSON: ${{ secrets.URL_SCARP_1_JSON }}

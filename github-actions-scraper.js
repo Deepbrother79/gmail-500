@@ -15,8 +15,8 @@ puppeteer.use(StealthPlugin());
 const CONFIG = {
   // Supabase
   SUPABASE_URL: process.env.SUPABASE_URL,
-  SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY,
-  TABLE_NAME: process.env.URL_TABLE,
+  SUPABASE_SERVICE_ROLE: process.env.SUPABASE_SERVICE_ROLE,
+  TABLE_NAME: extractTableName(process.env.URL_TABLE),
 
   // Target 1
   TARGET_1_URL: process.env.URL_SCARP_1,
@@ -32,12 +32,31 @@ const CONFIG = {
 };
 
 /**
+ * Estrae il nome della tabella da URL_TABLE
+ * Supporta sia URL completi che nomi semplici
+ * @param {string} urlTable - URL o nome tabella
+ * @returns {string} Nome della tabella
+ */
+function extractTableName(urlTable) {
+  if (!urlTable) return null;
+
+  // Se è un URL completo (contiene /rest/v1/)
+  if (urlTable.includes('/rest/v1/')) {
+    const parts = urlTable.split('/rest/v1/');
+    return parts[1]?.split('?')[0] || null;
+  }
+
+  // Altrimenti è già il nome della tabella
+  return urlTable;
+}
+
+/**
  * Valida che tutti i secrets siano configurati
  */
 function validateConfig(config) {
   const required = [
     'SUPABASE_URL',
-    'SUPABASE_ANON_KEY',
+    'SUPABASE_SERVICE_ROLE',
     'TABLE_NAME',
     'TARGET_1_URL',
     'TARGET_1_API',
@@ -66,6 +85,7 @@ Settings > Secrets and variables > Actions > New repository secret
   });
 
   console.log('✅ Configuration validated');
+  console.log(`   Table name: ${config.TABLE_NAME}`);
 }
 
 /**
@@ -208,8 +228,9 @@ async function scrapeTarget(target) {
  */
 async function updateSupabase(products, tableName) {
   console.log(`\n💾 Connecting to Supabase...`);
+  console.log(`   Table: ${tableName}`);
 
-  const supabase = createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+  const supabase = createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_SERVICE_ROLE);
 
   const results = {
     updated: 0,
