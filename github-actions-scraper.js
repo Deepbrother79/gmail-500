@@ -1,299 +1,383 @@
 /**
- * Gmail500 Scraper per GitHub Actions
- * Soluzione GRATUITA alternativa a Cloudflare Workers
+ * Gmail500 Scraper - Multi-Endpoint Edition
+ * Soluzione GRATUITA per GitHub Actions
  * Con Cloudflare bypass usando puppeteer-extra-plugin-stealth
+ * UPDATE-only (non inserisce nuovi record)
  */
 
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { createClient } from '@supabase/supabase-js';
 
-// Aggiungi plugin stealth per bypassare Cloudflare
 puppeteer.use(StealthPlugin());
 
-// Configurazione
+// Configurazione da Environment Variables (GitHub Secrets)
 const CONFIG = {
-  TARGET_URL: 'https://gmail500.com/email/3011',
-  API_URL_PATTERN: '/api/v1/product/get/3011',
-  BROWSER_TIMEOUT: 60000, // 60 secondi
+  // Supabase
+  SUPABASE_URL: process.env.SUPABASE_URL,
+  SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY,
+  TABLE_NAME: process.env.URL_TABLE,
+
+  // Target 1
+  TARGET_1_URL: process.env.URL_SCARP_1,
+  TARGET_1_API: process.env.URL_SCARP_1_JSON,
+
+  // Target 2
+  TARGET_2_URL: process.env.URL_SCARP_2,
+  TARGET_2_API: process.env.URL_SCARP_2_JSON,
+
+  // Settings
+  BROWSER_TIMEOUT: 60000,
   MAX_RETRIES: 3,
 };
 
 /**
- * Scrape dati da Gmail500 - VERSIONE OTTIMIZZATA
- * Strategia: API Interception (più affidabile) + DOM Scraping come fallback
+ * Valida che tutti i secrets siano configurati
  */
-async function scrapeGmail500() {
+function validateConfig(config) {
+  const required = [
+    'SUPABASE_URL',
+    'SUPABASE_ANON_KEY',
+    'TABLE_NAME',
+    'TARGET_1_URL',
+    'TARGET_1_API',
+    'TARGET_2_URL',
+    'TARGET_2_API',
+  ];
+
+  const missing = required.filter(key => !config[key]);
+
+  if (missing.length > 0) {
+    throw new Error(`
+❌ Missing required secrets: ${missing.join(', ')}
+
+Configure them in GitHub:
+Settings > Secrets and variables > Actions > New repository secret
+    `);
+  }
+
+  // Validazione formato URL
+  const urls = [config.TARGET_1_URL, config.TARGET_2_URL, config.SUPABASE_URL];
+
+  urls.forEach(url => {
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      throw new Error(`Invalid URL format: ${url}`);
+    }
+  });
+
+  console.log('✅ Configuration validated');
+}
+
+/**
+ * Scrape generico di un target
+ * @param {Object} target - { name, url, apiPattern }
+ * @returns {Promise<Object>} { target, products[] }
+ */
+async function scrapeTarget(target) {
+  console.log(`\n🎯 Scraping ${target.name}...`);
+  console.log(`   URL: ${target.url}`);
+  console.log(`   API Pattern: ${target.apiPattern}`);
+
   let browser = null;
   let lastError = null;
 
   for (let attempt = 1; attempt <= CONFIG.MAX_RETRIES; attempt++) {
     try {
-      console.log(`\n🔄 Tentativo ${attempt}/${CONFIG.MAX_RETRIES}`);
+      console.log(`   🔄 Attempt ${attempt}/${CONFIG.MAX_RETRIES}`);
 
-      // Launch browser con configurazione ottimizzata per GitHub Actions
-      // Con stealth plugin per bypassare Cloudflare
+      // Launch browser con stealth plugin
       browser = await puppeteer.launch({
-        headless: "new",
+        headless: 'new',
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
           '--disable-dev-shm-usage',
           '--disable-gpu',
-          '--disable-blink-features=AutomationControlled', // Nasconde automazione
+          '--disable-blink-features=AutomationControlled',
         ],
       });
 
-      console.log('✅ Browser lanciato');
-
       const page = await browser.newPage();
 
-      // Logging delle richieste di rete per debug
-      let requestCount = 0;
-      page.on('request', request => {
-        if (request.url().includes('gmail500.com')) {
-          requestCount++;
-          console.log(`📤 Request ${requestCount}: ${request.method()} ${request.url()}`);
-        }
-      });
-
-      // === STRATEGIA 1: API INTERCEPTION (PRIMARIA) ===
-      console.log('🎯 Strategia 1: Intercettazione API...');
+      // Imposta User Agent
+      await page.setUserAgent(
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      );
 
       let apiData = null;
       let apiResolved = false;
-      let responseCount = 0;
 
-      // Setup listener PRIMA di navigare
-      page.on('response', async (response) => {
+      // Setup listener per intercettare API response
+      page.on('response', async response => {
         const url = response.url();
-        if (url.includes('gmail500.com')) {
-          responseCount++;
-          console.log(`📥 Response ${responseCount}: ${response.status()} ${url}`);
-        }
 
-        if (url.includes(CONFIG.API_URL_PATTERN) && response.status() === 200) {
+        if (url.includes(target.apiPattern) && response.status() === 200) {
           try {
             const json = await response.json();
-            console.log('✅ API Response intercettata:', JSON.stringify(json));
-            apiData = json;
+            console.log(`   ✅ API Response intercepted from: ${target.apiPattern}`);
+
+            // Normalizza formato JSON (supporta vari formati)
+            if (Array.isArray(json)) {
+              apiData = json;
+            } else if (json.data && Array.isArray(json.data)) {
+              apiData = json.data;
+            } else if (json.successful && json.data && Array.isArray(json.data)) {
+              apiData = json.data;
+            } else if (json.successful && json.data) {
+              apiData = [json.data];
+            } else {
+              console.log('   ⚠️  Unexpected JSON format:', Object.keys(json));
+            }
+
             apiResolved = true;
           } catch (e) {
-            console.log('⚠️  Errore parsing JSON API:', e.message);
+            console.log(`   ⚠️  JSON parse error: ${e.message}`);
           }
         }
       });
 
       // Naviga alla pagina
-      console.log(`🌐 Navigando a ${CONFIG.TARGET_URL}...`);
-      await page.goto(CONFIG.TARGET_URL, {
-        waitUntil: 'networkidle2', // Cambiato da networkidle0 per essere meno restrittivo
+      console.log(`   🌐 Navigating to page...`);
+      await page.goto(target.url, {
+        waitUntil: 'networkidle2',
         timeout: CONFIG.BROWSER_TIMEOUT,
       });
 
-      console.log(`✅ Pagina caricata! Richieste: ${requestCount}, Risposte: ${responseCount}`);
+      console.log(`   ✅ Page loaded`);
 
-      // Aspetta che l'API risponda (con timeout più lungo)
-      console.log('⏳ Aspettando risposta API...');
-      const maxWaitTime = 15000; // 15 secondi
+      // Attendi che l'API risponda (max 15 secondi)
+      console.log(`   ⏳ Waiting for API response...`);
+      const maxWaitTime = 15000;
       const startTime = Date.now();
-      while (!apiResolved && (Date.now() - startTime) < maxWaitTime) {
+
+      while (!apiResolved && Date.now() - startTime < maxWaitTime) {
         await new Promise(resolve => setTimeout(resolve, 200));
       }
 
-      if (apiResolved) {
-        console.log('✅ Risposta API ricevuta!');
-      } else {
-        console.log(`⚠️  API non ha risposto entro ${maxWaitTime}ms`);
-      }
+      await browser.close();
+      browser = null;
 
-      // Se abbiamo i dati dall'API, usali
-      if (apiData?.successful && apiData.data) {
-        console.log('✅ Dati estratti da API interception');
-        const result = {
-          success: true,
-          price: apiData.data.price,
-          count: apiData.data.count,
-          timestamp: new Date().toISOString(),
-          method: 'api-interception',
+      if (apiData && apiData.length > 0) {
+        console.log(`   ✅ Extracted ${apiData.length} products`);
+
+        // Trasforma i dati nel formato richiesto
+        const products = apiData.map(p => ({
+          code: p.code,
+          price: parseFloat(p.price),
+          count: parseInt(p.count),
+        }));
+
+        return {
+          target: target.name,
+          products: products,
         };
-
-        console.log('✅ Scraping completato:', result);
-        await browser.close();
-        return result;
       }
 
-      // === STRATEGIA 2: DOM SCRAPING (FALLBACK) ===
-      console.log('🎯 Strategia 2: DOM Scraping fallback...');
-
-      // Selettori CSS multipli come fallback
-      const selectors = {
-        quantity: [
-          '#root > div.ant-layout.my-var-css > div:nth-child(2) > div > div > div > div:nth-child(1) > div.ant-ribbon-wrapper.my-var-css > div.ant-ribbon.ant-ribbon-placement-end > span',
-          '.ant-ribbon span',
-          '[class*="ribbon"] span'
-        ],
-        price: [
-          '#root > div.ant-layout.my-var-css > div:nth-child(2) > div > div > div > div:nth-child(1) > div:nth-child(2) > h3',
-          'h3[class*="price"]',
-          'h3'
-        ]
-      };
-
-      // Aspetta che la pagina sia pronta
-      console.log('⏳ Aspettando rendering React...');
-      await page.waitForTimeout(3000); // Wait più lungo per GitHub Actions
-
-      // Prova tutti i selettori
-      let count = null;
-      let price = null;
-
-      for (const qtySelector of selectors.quantity) {
-        try {
-          await page.waitForSelector(qtySelector, { timeout: 5000 });
-          const text = await page.$eval(qtySelector, el => el.textContent.trim());
-          const match = text.match(/(\d+)/);
-          if (match) {
-            count = parseInt(match[1]);
-            console.log(`✅ Quantità trovata con selettore: ${qtySelector} = ${count}`);
-            break;
-          }
-        } catch (e) {
-          console.log(`⚠️  Selettore quantità fallito: ${qtySelector}`);
-        }
-      }
-
-      for (const priceSelector of selectors.price) {
-        try {
-          await page.waitForSelector(priceSelector, { timeout: 5000 });
-          const text = await page.$eval(priceSelector, el => el.textContent.trim());
-          const match = text.match(/([\d.]+)/);
-          if (match) {
-            price = parseFloat(match[1]);
-            console.log(`✅ Prezzo trovato con selettore: ${priceSelector} = ${price}`);
-            break;
-          }
-        } catch (e) {
-          console.log(`⚠️  Selettore prezzo fallito: ${priceSelector}`);
-        }
-      }
-
-      // Valida risultati DOM scraping
-      if (count !== null && price !== null) {
-        const result = {
-          success: true,
-          price: price,
-          count: count,
-          timestamp: new Date().toISOString(),
-          method: 'dom-scraping',
-        };
-
-        console.log('✅ Scraping completato:', result);
-        await browser.close();
-        return result;
-      }
-
-      // Se arriviamo qui, nessuna strategia ha funzionato
-      throw new Error(`Entrambe le strategie fallite. API data: ${!!apiData}, Count: ${count}, Price: ${price}`);
-
+      throw new Error('API data not received or empty');
     } catch (error) {
       lastError = error;
-      console.error(`❌ Tentativo ${attempt} fallito:`, error.message);
-      console.error('Stack:', error.stack);
+      console.error(`   ❌ Attempt ${attempt} failed: ${error.message}`);
 
       if (browser) {
         try {
           await browser.close();
         } catch (e) {
-          console.error('Errore chiusura browser:', e.message);
+          // Ignore close errors
         }
         browser = null;
       }
 
       if (attempt < CONFIG.MAX_RETRIES) {
-        const delay = Math.min(3000 * attempt, 15000); // Delay più lungo
-        console.log(`⏰ Attendo ${delay}ms prima del prossimo tentativo...`);
+        const delay = 3000 * attempt;
+        console.log(`   ⏰ Waiting ${delay}ms before retry...`);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
   }
 
   throw new Error(
-    `Scraping fallito dopo ${CONFIG.MAX_RETRIES} tentativi. Ultimo errore: ${lastError?.message}`
+    `${target.name} failed after ${CONFIG.MAX_RETRIES} retries. Last error: ${lastError?.message}`
   );
 }
 
 /**
- * Salva dati su Supabase
+ * Aggiorna i prodotti su Supabase (UPDATE only, no INSERT)
+ * @param {Array} products - Array di prodotti da aggiornare
+ * @param {String} tableName - Nome della tabella Supabase
+ * @returns {Promise<Object>} Statistiche update
  */
-async function saveToSupabase(data) {
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_ANON_KEY;
+async function updateSupabase(products, tableName) {
+  console.log(`\n💾 Connecting to Supabase...`);
 
-  if (!supabaseUrl || !supabaseKey) {
-    throw new Error(
-      'Secrets Supabase non configurati. Vai su GitHub > Settings > Secrets and variables > Actions'
-    );
-  }
+  const supabase = createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
 
-  console.log('\n💾 Connessione a Supabase...');
-  const supabase = createClient(supabaseUrl, supabaseKey);
-
-  const record = {
-    price: data.price,
-    count: data.count,
-    timestamp: data.timestamp,
-    created_at: new Date().toISOString(),
+  const results = {
+    updated: 0,
+    skipped: 0,
+    errors: [],
   };
 
-  console.log('📝 Inserendo record:', record);
+  console.log(`📝 Processing ${products.length} products...\n`);
 
-  const { data: insertedData, error } = await supabase
-    .from('gmail500_products')
-    .insert([record])
-    .select();
+  for (const product of products) {
+    try {
+      // 1. Verifica se il record esiste
+      const { data: existing, error: selectError } = await supabase
+        .from(tableName)
+        .select('id')
+        .eq('id_provider', product.code)
+        .maybeSingle();
 
-  if (error) {
-    throw new Error(`Errore Supabase: ${error.message}`);
+      if (selectError) {
+        throw selectError;
+      }
+
+      if (!existing) {
+        console.log(`⏭️  SKIP: id_provider ${product.code} does not exist`);
+        results.skipped++;
+        continue;
+      }
+
+      // 2. UPDATE solo price e quantity (NON tocca name, type, etc.)
+      const { error: updateError } = await supabase
+        .from(tableName)
+        .update({
+          price: product.price,
+          quantity: product.count,
+        })
+        .eq('id_provider', product.code);
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      console.log(
+        `✅ UPDATE: id_provider ${product.code} → price=${product.price}, qty=${product.count}`
+      );
+      results.updated++;
+    } catch (error) {
+      console.error(`❌ ERROR: id_provider ${product.code} → ${error.message}`);
+      results.errors.push({
+        code: product.code,
+        error: error.message,
+      });
+    }
   }
 
-  console.log('✅ Dati salvati su Supabase:', insertedData);
-  return { success: true, data: insertedData };
+  return results;
 }
 
 /**
- * Main
+ * Main function - Orchestrazione con Promise.allSettled
  */
 async function main() {
   console.log('╔════════════════════════════════════════╗');
-  console.log('║  Gmail500 Scraper - GitHub Actions    ║');
-  console.log('║  Soluzione GRATUITA                    ║');
+  console.log('║  Gmail500 Scraper - Multi-Endpoint    ║');
+  console.log('║  UPDATE Mode (No Insert)               ║');
   console.log('╚════════════════════════════════════════╝');
-  console.log(`\n🕐 Esecuzione: ${new Date().toISOString()}`);
+  console.log(`\n🕐 Execution time: ${new Date().toISOString()}\n`);
 
   try {
-    // 1. Scrape
-    const scrapedData = await scrapeGmail500();
+    // 1. Validazione configurazione
+    validateConfig(CONFIG);
 
-    // 2. Salva
-    const saveResult = await saveToSupabase(scrapedData);
+    // 2. Definisci targets
+    const targets = [
+      {
+        name: 'Target 1',
+        url: CONFIG.TARGET_1_URL,
+        apiPattern: CONFIG.TARGET_1_API,
+      },
+      {
+        name: 'Target 2',
+        url: CONFIG.TARGET_2_URL,
+        apiPattern: CONFIG.TARGET_2_API,
+      },
+    ];
 
-    console.log('\n╔════════════════════════════════════════╗');
-    console.log('║  ✅ COMPLETATO CON SUCCESSO            ║');
+    // 3. Scrape PARALLELO con Promise.allSettled
+    console.log('🔄 Starting parallel scraping...');
+    const scrapeResults = await Promise.allSettled(
+      targets.map(target => scrapeTarget(target))
+    );
+
+    // 4. Processa risultati
+    const successfulScrapes = [];
+    const failedScrapes = [];
+
+    scrapeResults.forEach((result, i) => {
+      if (result.status === 'fulfilled') {
+        console.log(
+          `\n✅ ${targets[i].name}: ${result.value.products.length} products extracted`
+        );
+        successfulScrapes.push(result.value);
+      } else {
+        console.error(`\n❌ ${targets[i].name}: ${result.reason.message}`);
+        failedScrapes.push({
+          target: targets[i].name,
+          error: result.reason,
+        });
+      }
+    });
+
+    // 5. Verifica che almeno un target abbia successo
+    if (successfulScrapes.length === 0) {
+      throw new Error('All targets failed. No data to update.');
+    }
+
+    // 6. Aggrega tutti i prodotti
+    const allProducts = successfulScrapes.flatMap(s => s.products);
+    console.log(`\n📦 Total products to process: ${allProducts.length}`);
+
+    // 7. Update Supabase
+    const updateResults = await updateSupabase(allProducts, CONFIG.TABLE_NAME);
+
+    // 8. Report finale
+    console.log('\n' + '═'.repeat(50));
+    console.log('╔════════════════════════════════════════╗');
+    console.log('║  ✅ EXECUTION COMPLETED                ║');
     console.log('╚════════════════════════════════════════╝');
-    console.log('\nDati estratti:');
-    console.log(`  💰 Prezzo: $${scrapedData.price}`);
-    console.log(`  📦 Quantità: ${scrapedData.count}`);
-    console.log(`  🕐 Timestamp: ${scrapedData.timestamp}`);
+    console.log('═'.repeat(50));
+    console.log('\n📊 STATISTICS:');
+    console.log(`   - Targets successful: ${successfulScrapes.length}/2`);
+    console.log(`   - Products extracted: ${allProducts.length}`);
+    console.log(`   - Records updated: ${updateResults.updated}`);
+    console.log(`   - Records skipped: ${updateResults.skipped}`);
+    console.log(`   - Update errors: ${updateResults.errors.length}`);
 
+    if (failedScrapes.length > 0) {
+      console.log(`\n⚠️  WARNING: ${failedScrapes.length} target(s) failed:`);
+      failedScrapes.forEach(f => {
+        console.log(`   - ${f.target}: ${f.error.message}`);
+      });
+    }
+
+    if (updateResults.errors.length > 0) {
+      console.log(`\n❌ UPDATE ERRORS:`);
+      updateResults.errors.slice(0, 10).forEach(e => {
+        console.log(`   - id_provider ${e.code}: ${e.error}`);
+      });
+      if (updateResults.errors.length > 10) {
+        console.log(`   ... and ${updateResults.errors.length - 10} more`);
+      }
+    }
+
+    console.log('\n' + '═'.repeat(50));
+    console.log(`🏁 Finished at: ${new Date().toISOString()}`);
+    console.log('═'.repeat(50) + '\n');
+
+    // Exit 0 se almeno 1 target ha successo
     process.exit(0);
-
   } catch (error) {
-    console.error('\n╔════════════════════════════════════════╗');
-    console.error('║  ❌ ERRORE                             ║');
+    console.error('\n' + '═'.repeat(50));
+    console.error('╔════════════════════════════════════════╗');
+    console.error('║  ❌ EXECUTION FAILED                   ║');
     console.error('╚════════════════════════════════════════╝');
-    console.error('\nDettagli:', error.message);
-    console.error('Stack:', error.stack);
+    console.error('═'.repeat(50));
+    console.error(`\n💥 Error: ${error.message}`);
+    console.error(`\n📚 Stack trace:`);
+    console.error(error.stack);
+    console.error('\n' + '═'.repeat(50) + '\n');
 
     process.exit(1);
   }

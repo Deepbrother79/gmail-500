@@ -7,7 +7,8 @@
   "scripts": {
     "scrape": "node github-actions-scraper.js",
     "test": "node github-actions-scraper.js",
-    "debug": "node debug-scraper.js"
+    "debug": "node debug-scraper.js",
+    "test-network": "node test-network-capture.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",

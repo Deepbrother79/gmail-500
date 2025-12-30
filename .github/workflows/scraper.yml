@@ -40,6 +40,11 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          URL_TABLE: ${{ secrets.URL_TABLE }}
+          URL_SCARP_1: ${{ secrets.URL_SCARP_1 }}
+          URL_SCARP_1_JSON: ${{ secrets.URL_SCARP_1_JSON }}
+          URL_SCARP_2: ${{ secrets.URL_SCARP_2 }}
+          URL_SCARP_2_JSON: ${{ secrets.URL_SCARP_2_JSON }}
         run: node github-actions-scraper.js
 
       - name: Report status
