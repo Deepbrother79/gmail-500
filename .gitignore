@@ -24,3 +24,13 @@ Thumbs.db
 # Environment variables
 .env
 .env.local
+
+# Test and debug files (may contain sensitive data)
+test-*.js
+debug-*.js
+*-test.js
+*-debug.js
+
+# Screenshots and temporary files
+screenshots/
+nul
