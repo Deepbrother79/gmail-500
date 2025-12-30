@@ -180,12 +180,28 @@ async function scrapeTarget(target) {
       if (apiData && apiData.length > 0) {
         console.log(`   ✅ Extracted ${apiData.length} products`);
 
+        // Debug: Log primi 3 prodotti per verificare i dati
+        console.log(`   🔍 Sample data (first 3 products):`);
+        apiData.slice(0, 3).forEach(p => {
+          console.log(`      code=${p.code}, price=${p.price}, discountPrice=${p.discountPrice}, count=${p.count}`);
+        });
+
         // Trasforma i dati nel formato richiesto
         const products = apiData.map(p => {
           // Usa discountPrice se disponibile, altrimenti price
           const finalPrice = p.discountPrice !== null && p.discountPrice !== undefined
             ? p.discountPrice
             : p.price;
+
+          // Debug log per prodotto 3011
+          if (p.code === '3011') {
+            console.log(`   🔍 Product 3011 DEBUG:`);
+            console.log(`      Original price: ${p.price}`);
+            console.log(`      Original discountPrice: ${p.discountPrice}`);
+            console.log(`      discountPrice !== null: ${p.discountPrice !== null}`);
+            console.log(`      discountPrice !== undefined: ${p.discountPrice !== undefined}`);
+            console.log(`      Final price selected: ${finalPrice}`);
+          }
 
           return {
             code: p.code,
