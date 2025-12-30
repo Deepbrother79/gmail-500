@@ -1,9 +1,14 @@
 /**
  * TEST SCRAPER - Estrazione dal DOM HTML (SENZA Supabase)
  * Versione semplificata che estrae direttamente dalla pagina
+ * Con Cloudflare bypass usando puppeteer-extra-plugin-stealth
  */
 
-import puppeteer from 'puppeteer';
+import puppeteer from 'puppeteer-extra';
+import StealthPlugin from 'puppeteer-extra-plugin-stealth';
+
+// Aggiungi plugin stealth per bypassare Cloudflare
+puppeteer.use(StealthPlugin());
 
 // Configurazione
 const CONFIG = {
@@ -25,8 +30,8 @@ async function scrapeGmail500() {
       console.log(`🔄 TENTATIVO ${attempt}/${CONFIG.MAX_RETRIES}`);
       console.log('='.repeat(60));
 
-      // Launch browser
-      console.log('\n📱 Lanciando browser Puppeteer...');
+      // Launch browser con stealth plugin per bypassare Cloudflare
+      console.log('\n📱 Lanciando browser Puppeteer con Cloudflare bypass...');
       browser = await puppeteer.launch({
         headless: 'new',
         args: [
@@ -34,6 +39,7 @@ async function scrapeGmail500() {
           '--disable-setuid-sandbox',
           '--disable-dev-shm-usage',
           '--disable-gpu',
+          '--disable-blink-features=AutomationControlled',
         ],
       });
       console.log('✅ Browser lanciato con successo');
